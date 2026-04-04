@@ -241,6 +241,10 @@ html, body {
       <input class="settings-input" id="sheetsUrl" placeholder="https://script.google.com/macros/s/..." maxlength="500" style="font-size:12px;">
       <button class="settings-btn accent" onclick="saveSettings()">Save URL</button>
       <button class="settings-btn" onclick="testSync()">Test connection</button>
+      <div style="margin-top:10px;">
+        <button class="settings-btn accent" onclick="syncPending()" id="syncPendingBtn">Sync pending trips</button>
+        <span id="pendingCount" style="font-size:11px;color:var(--text3);letter-spacing:0.08em;"></span>
+      </div>
     </div>
     <div class="settings-section">
       <div class="settings-section-label">Mileage by year</div>
@@ -296,7 +300,7 @@ function switchTab(tab) {
     document.querySelectorAll('.tab')[i].classList.toggle('active', t === tab);
   });
   if (tab === 'history') { populateYearFilter(); renderHistory(); }
-  if (tab === 'settings') renderSettings();
+  if (tab === 'settings') { renderSettings(); updatePendingCount(); }
 }
 
 function populateVehicles() {
@@ -346,7 +350,7 @@ async function saveTrip() {
   if (!dest)          { showToast('Destination required','error'); return; }
   if (!desc)          { showToast('Description required','error'); return; }
   if (!miles||miles<=0){ showToast('Enter valid miles','error'); return; }
-  const trip = { id: Date.now(), date, vehicle, start: state.homeAddress||'Home', destination: dest, desc, miles, notes };
+  const trip = { id: Date.now(), date, vehicle, start: state.homeAddress||'Home', destination: dest, desc, miles, notes, synced: false };
   state.trips.unshift(trip); save();
   document.getElementById('tripDestination').value = '';
   document.getElementById('tripDesc').value = '';
@@ -371,8 +375,47 @@ async function syncToSheets(trip) {
       body: JSON.stringify({ date:trip.date, vehicle:trip.vehicle, start:trip.start,
         destination:trip.destination, description:trip.desc, miles:trip.miles, notes:trip.notes })
     });
+    const t = state.trips.find(t => t.id === trip.id);
+    if (t) { t.synced = true; save(); }
     setSyncStatus('synced'); setTimeout(()=>setSyncStatus(''),4000);
+    updatePendingCount();
   } catch(e) { setSyncStatus('error'); showToast('Sync failed — saved locally','error'); }
+}
+
+async function syncPending() {
+  if (!state.sheetsUrl) { showToast('No Sheets URL saved','error'); return; }
+  const pending = state.trips.filter(t => !t.synced);
+  if (pending.length === 0) { showToast('All trips synced','success'); return; }
+  setSyncStatus('syncing');
+  let success = 0;
+  for (const trip of pending) {
+    try {
+      await fetch(state.sheetsUrl, { method:'POST', mode:'no-cors',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ date:trip.date, vehicle:trip.vehicle, start:trip.start,
+          destination:trip.destination, description:trip.desc, miles:trip.miles, notes:trip.notes })
+      });
+      trip.synced = true;
+      success++;
+    } catch(e) {}
+  }
+  save();
+  updatePendingCount();
+  if (success === pending.length) {
+    setSyncStatus('synced');
+    showToast(`${success} trip${success!==1?'s':''} synced`, 'success');
+    setTimeout(()=>setSyncStatus(''),4000);
+  } else {
+    setSyncStatus('error');
+    showToast(`${success} of ${pending.length} synced`, 'error');
+  }
+}
+
+function updatePendingCount() {
+  const el = document.getElementById('pendingCount');
+  if (!el) return;
+  const n = state.trips.filter(t => !t.synced).length;
+  el.textContent = n > 0 ? `${n} unsynced` : 'All synced';
 }
 async function testSync() {
   const url = document.getElementById('sheetsUrl').value.trim();
