@@ -86,6 +86,35 @@ html, body {
 .save-btn:active { opacity: 0.7; }
 .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
+/* Round trip toggle */
+.round-trip-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius);
+  padding: 12px 13px; margin-bottom: 18px; cursor: pointer; transition: border-color 0.2s;
+  -webkit-user-select: none; user-select: none;
+}
+.round-trip-row:active { opacity: 0.8; }
+.round-trip-row.active { border-color: rgba(200,169,110,0.4); background: var(--accent-dim); }
+.round-trip-label { font-size: 13px; font-weight: 300; color: var(--text2); transition: color 0.2s; }
+.round-trip-row.active .round-trip-label { color: var(--accent); }
+.round-trip-pill {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 9px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text3); transition: color 0.2s;
+}
+.round-trip-row.active .round-trip-pill { color: var(--accent); }
+.round-trip-indicator {
+  width: 28px; height: 16px; border-radius: 8px; background: var(--bg3);
+  border: 0.5px solid var(--border2); position: relative; transition: background 0.2s, border-color 0.2s;
+}
+.round-trip-row.active .round-trip-indicator { background: rgba(200,169,110,0.25); border-color: rgba(200,169,110,0.5); }
+.round-trip-indicator::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 10px; height: 10px; border-radius: 50%; background: var(--text3);
+  transition: transform 0.2s, background 0.2s;
+}
+.round-trip-row.active .round-trip-indicator::after { transform: translateX(12px); background: var(--accent); }
+
 /* Toast */
 .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--bg3); border: 0.5px solid var(--border2); color: var(--text2); font-family: var(--sans); font-size: 11px; font-weight: 300; letter-spacing: 0.12em; text-transform: uppercase; padding: 9px 18px; border-radius: 99px; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; z-index: 100; }
 .toast.show    { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -108,7 +137,9 @@ html, body {
 .trip-miles-unit { font-family: var(--sans); font-size: 11px; color: var(--text3); margin-left: 2px; }
 .trip-desc { font-size: 14px; font-weight: 300; color: var(--text); margin-bottom: 3px; }
 .trip-route { font-size: 11px; color: var(--text2); }
-.trip-vehicle { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin-top: 4px; }
+.trip-meta { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.trip-vehicle { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); }
+.trip-rt-badge { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); border: 0.5px solid rgba(200,169,110,0.35); padding: 1px 6px; border-radius: 2px; }
 .trip-notes { margin-top: 8px; font-family: var(--serif); font-style: italic; font-size: 13px; color: var(--text2); }
 .empty-state { text-align: center; padding: 52px 0; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--text3); }
 
@@ -190,6 +221,13 @@ html, body {
       <div class="field-label">Total miles</div>
       <input type="number" id="tripMiles" placeholder="0" min="0" step="0.1">
     </div>
+    <div class="round-trip-row" id="roundTripRow" onclick="toggleRoundTrip()">
+      <span class="round-trip-label">Round trip</span>
+      <div class="round-trip-pill">
+        <span id="roundTripText">One way</span>
+        <div class="round-trip-indicator"></div>
+      </div>
+    </div>
     <div class="field">
       <div class="field-label">Notes (optional)</div>
       <textarea id="tripNotes" placeholder="e.g. tolls, parking, weather"></textarea>
@@ -257,7 +295,7 @@ html, body {
     </div>
     <div class="settings-section">
       <div class="settings-section-label">Info</div>
-      <div class="settings-row"><span class="settings-row-label">Version</span><span class="settings-row-value">1.0.0</span></div>
+      <div class="settings-row"><span class="settings-row-label">Version</span><span class="settings-row-value">1.1.0</span></div>
       <div class="settings-row"><span class="settings-row-label">Trips logged</span><span class="settings-row-value" id="tripCount">0</span></div>
     </div>
   </div>
@@ -271,6 +309,8 @@ let state = {
   defaultVehicle: '2023 Subaru Outback',
   homeAddress: 'Home', sheetsUrl: ''
 };
+
+let roundTrip = false;
 
 function save() { localStorage.setItem('jrp_mileage_v2', JSON.stringify(state)); }
 function load() {
@@ -292,6 +332,14 @@ function setDateToday() {
 }
 function updateStartDisplay() {
   document.getElementById('startLocationDisplay').textContent = state.homeAddress || 'Home';
+}
+
+function toggleRoundTrip() {
+  roundTrip = !roundTrip;
+  const row = document.getElementById('roundTripRow');
+  const label = document.getElementById('roundTripText');
+  row.classList.toggle('active', roundTrip);
+  label.textContent = roundTrip ? 'Round trip' : 'One way';
 }
 
 function switchTab(tab) {
@@ -340,23 +388,38 @@ function saveSettings() {
 }
 
 async function saveTrip() {
-  const date  = document.getElementById('tripDate').value;
+  const date    = document.getElementById('tripDate').value;
   const vehicle = document.getElementById('tripVehicle').value;
-  const dest  = document.getElementById('tripDestination').value.trim();
-  const desc  = document.getElementById('tripDesc').value.trim();
-  const miles = parseFloat(document.getElementById('tripMiles').value);
-  const notes = document.getElementById('tripNotes').value.trim();
-  if (!date)          { showToast('Date required','error'); return; }
-  if (!dest)          { showToast('Destination required','error'); return; }
-  if (!desc)          { showToast('Description required','error'); return; }
+  const dest    = document.getElementById('tripDestination').value.trim();
+  const desc    = document.getElementById('tripDesc').value.trim();
+  const miles   = parseFloat(document.getElementById('tripMiles').value);
+  const notes   = document.getElementById('tripNotes').value.trim();
+  if (!date)           { showToast('Date required','error'); return; }
+  if (!dest)           { showToast('Destination required','error'); return; }
+  if (!desc)           { showToast('Description required','error'); return; }
   if (!miles||miles<=0){ showToast('Enter valid miles','error'); return; }
-  const trip = { id: Date.now(), date, vehicle, start: state.homeAddress||'Home', destination: dest, desc, miles, notes, synced: false };
+
+  const trip = {
+    id: Date.now(), date, vehicle,
+    start: state.homeAddress||'Home', destination: dest,
+    desc, miles, notes,
+    roundTrip,
+    synced: false
+  };
   state.trips.unshift(trip); save();
+
+  // Reset form
   document.getElementById('tripDestination').value = '';
   document.getElementById('tripDesc').value = '';
   document.getElementById('tripMiles').value = '';
   document.getElementById('tripNotes').value = '';
   setDateToday();
+
+  // Reset round trip toggle
+  roundTrip = false;
+  document.getElementById('roundTripRow').classList.remove('active');
+  document.getElementById('roundTripText').textContent = 'One way';
+
   showToast('Trip saved','success');
   syncToSheets(trip);
 }
@@ -372,8 +435,12 @@ async function syncToSheets(trip) {
   try {
     await fetch(state.sheetsUrl, { method:'POST', mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ date:trip.date, vehicle:trip.vehicle, start:trip.start,
-        destination:trip.destination, description:trip.desc, miles:trip.miles, notes:trip.notes })
+      body: JSON.stringify({
+        date: trip.date, vehicle: trip.vehicle, start: trip.start,
+        destination: trip.destination, description: trip.desc,
+        miles: trip.miles, notes: trip.notes,
+        roundTrip: trip.roundTrip ? 'Yes' : 'No'
+      })
     });
     const t = state.trips.find(t => t.id === trip.id);
     if (t) { t.synced = true; save(); }
@@ -392,8 +459,12 @@ async function syncPending() {
     try {
       await fetch(state.sheetsUrl, { method:'POST', mode:'no-cors',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ date:trip.date, vehicle:trip.vehicle, start:trip.start,
-          destination:trip.destination, description:trip.desc, miles:trip.miles, notes:trip.notes })
+        body: JSON.stringify({
+          date: trip.date, vehicle: trip.vehicle, start: trip.start,
+          destination: trip.destination, description: trip.desc,
+          miles: trip.miles, notes: trip.notes,
+          roundTrip: trip.roundTrip ? 'Yes' : 'No'
+        })
       });
       trip.synced = true;
       success++;
@@ -424,7 +495,7 @@ async function testSync() {
   try {
     await fetch(url, { method:'POST', mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({date:'TEST',vehicle:'TEST',start:'Home',destination:'TEST',description:'Connection test',miles:0,notes:'JRP Mileage'})
+      body: JSON.stringify({date:'TEST',vehicle:'TEST',start:'Home',destination:'TEST',description:'Connection test',miles:0,notes:'JRP Mileage',roundTrip:'No'})
     });
     setSyncStatus('synced'); showToast('Connection successful','success'); setTimeout(()=>setSyncStatus(''),4000);
   } catch(e) { setSyncStatus('error'); showToast('Could not connect','error'); }
@@ -465,7 +536,10 @@ function renderHistory() {
           <div class="trip-date">${ds}</div>
           <div class="trip-desc">${escHtml(t.desc)}</div>
           ${route?`<div class="trip-route">${route}</div>`:''}
-          <div class="trip-vehicle">${escHtml(t.vehicle)}</div>
+          <div class="trip-meta">
+            <span class="trip-vehicle">${escHtml(t.vehicle)}</span>
+            ${t.roundTrip?'<span class="trip-rt-badge">Round trip</span>':''}
+          </div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
           <div class="trip-miles">${t.miles.toFixed(1)}<span class="trip-miles-unit">mi</span></div>
@@ -506,8 +580,8 @@ function renderSettings() {
 }
 function exportCSV() {
   if(!state.trips.length){showToast('No trips to export','error');return;}
-  const rows=[['Date','Vehicle','Start','Destination','Description','Miles','Notes']];
-  state.trips.forEach(t=>rows.push([t.date,t.vehicle,t.start||'Home',t.destination||'',t.desc,t.miles,t.notes||'']));
+  const rows=[['Date','Vehicle','Start','Destination','Description','Miles','Round Trip','Notes']];
+  state.trips.forEach(t=>rows.push([t.date,t.vehicle,t.start||'Home',t.destination||'',t.desc,t.miles,t.roundTrip?'Yes':'No',t.notes||'']));
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
