@@ -467,11 +467,20 @@ function renderHistory() {
           ${route?`<div class="trip-route">${route}</div>`:''}
           <div class="trip-vehicle">${escHtml(t.vehicle)}</div>
         </div>
-        <div class="trip-miles">${t.miles.toFixed(1)}<span class="trip-miles-unit">mi</span></div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:10px;">
+          <div class="trip-miles">${t.miles.toFixed(1)}<span class="trip-miles-unit">mi</span></div>
+          <button onclick="deleteTrip(${t.id})" style="background:none;border:none;font-family:var(--sans);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);cursor:pointer;padding:0;" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='var(--text3)'">Delete</button>
+        </div>
       </div>
       ${t.notes?`<div class="trip-notes">${escHtml(t.notes)}</div>`:''}
     </div>`;
   }).join('');
+}
+function deleteTrip(id) {
+  if (!confirm('Delete this trip?')) return;
+  state.trips = state.trips.filter(t => t.id !== id);
+  save(); renderHistory(); updatePendingCount();
+  showToast('Trip deleted');
 }
 function renderSettings() {
   document.getElementById('homeAddress').value = state.homeAddress||'';
